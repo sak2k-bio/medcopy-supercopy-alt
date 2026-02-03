@@ -45,11 +45,12 @@ CRITICAL RULES
 ━━━━━━━━━━━━━━━━━━
 OUTPUT REQUIREMENTS
 ━━━━━━━━━━━━━━━━━━
-• Produce ONE clean, final draft
-• No explanations, no meta commentary
-• Use medically correct terminology appropriate to the audience
-• Optimize for clarity, trust, and authority
-• Format cleanly for the chosen platform
+• Produce ONE clean, final draft.
+• NO Markdown bolding (**text**), italics (*text*), or special formatting characters.
+• Do NOT use asterisks (**) for emphasis. Use CAPITALIZATION if emphasis is absolutely needed, but prefer plain text.
+• No explanations, no meta commentary.
+• Use medically correct terminology appropriate to the audience.
+• Optimize for clarity, trust, and authority.
 `;
 
 export const generateMedicalCopy = async (inputs: GenerationInputs): Promise<GenerationResult> => {
@@ -97,6 +98,7 @@ FOLLOW THIS WRITING STYLE:
 • SHOULD use bullet point lists in social media posts.
 • SHOULD use data and examples to support claims when possible.
 • SHOULD use “you” and “your” to directly address the reader.
+• AVOID bolding (**text**) entirely. Use plain text.
 • AVOID using em dashes (—) anywhere in your response. Use only commas, periods, or other standard punctuation. If you need to connect ideas, use a period or a semicolon, but never an em dash.
 • AVOID constructions like “…not just this, but also this”.
 • AVOID metaphors and clichés.
@@ -106,7 +108,7 @@ FOLLOW THIS WRITING STYLE:
 • AVOID unnecessary adjectives and adverbs.
 • AVOID staccato stop start sentences.
 • AVOID rhetorical questions.
-• AVOID hashtags.
+• AVOID hashtags (unless requested).
 • AVOID semicolons.
 • AVOID markdown.
 • AVOID asterisks.
@@ -168,7 +170,8 @@ OUTPUT REQUIREMENTS:
 1. Topic-Wise Class Summary (with Timestamps)
    - Divide the lecture into clear biochemistry topics (e.g., Glycolysis Regulation, Urea Cycle Disorders).
    - Each topic must include an accurate timestamp range based on the source text.
-   - **STRICT FORMATTING**: Timestamps MUST be enclosed in square brackets (e.g., **[14:10–22:45]**).
+   - **STRICT FORMATTING**: Timestamps MUST be enclosed in square brackets (e.g., [14:10–22:45]).
+   - HEADINGS must be CAPITALIZED (e.g. GLYCOLYSIS REGULATION [12:00-14:00]).
 
 2. High-Yield Learning Notes
    - Focus strictly on: Pathways, reactions, enzymes, cofactors, Rate-limiting steps, Regulatory mechanisms.
@@ -178,12 +181,13 @@ OUTPUT REQUIREMENTS:
    - Explicitly highlight: Diseases & deficiencies, Lab findings, Biochemical basis of symptoms.
 
 4. Competitive Exam Takeaways
-   - Add a dedicated section per topic (or at the end) labeled: “Exam Pearls / High-Yield Points”.
+   - Add a dedicated section per topic (or at the end) labeled: “EXAM PEARLS / HIGH-YIELD POINTS”.
    - Include: One-liner facts, Common traps, Comparisons.
 
 FORMATTING RULES:
-- Use clear headings formatted as: **Topic Name [Start Time - End Time]**
-- Use bullet points instead of paragraphs.
+- NO BOLDING (**). NO ITALICS (*). NO SPECIAL CHARACTERS.
+- Use standard bullet points (-) or numbered lists (1.).
+- Use CAPITALIZATION for headings to distinguish sections without using Markdown.
 - No filler, no storytelling, no meta-commentary.
 
 ${antiAiStyleInstruction}
@@ -205,10 +209,14 @@ CRITICAL INSTRUCTIONS:
 2. **Filter Noise**: Completely ignore timestamps (e.g., 00:11:06), speaker labels, and conversational filler. Extract only the signal.
 3. **Persona Voice**: Analyze the content *through the lens* of the persona. Add the persona's wisdom to the raw facts.
 4. **Required Structure**:
-   • **The Core Thesis**: A 1-2 sentence hook summarizing the entire text.
-   • **Key Medical Insights**: 3-7 deep, distinct sections or bullet points.
-   • **Clinical/Practical Implication**: Why this matters for the specific audience.
-5. **Formatting**: Use bolding for key terms. Use spacing between sections.
+   • **THE CORE THESIS**: A 1-2 sentence hook summarizing the entire text.
+   • **KEY MEDICAL INSIGHTS**: 3-7 deep, distinct sections or bullet points.
+   • **CLINICAL/PRACTICAL IMPLICATION**: Why this matters for the specific audience.
+5. **Formatting**: 
+   - DO NOT USE BOLDING (**). 
+   - DO NOT USE ITALICS (*).
+   - Use CAPITALIZED HEADINGS for sections.
+   - Use standard bullet points (-).
 
 SOURCE TEXT:
 ${inputs.context}
@@ -490,6 +498,7 @@ INSTRUCTIONS
 2. Assign an alignment score from 0-100.
 3. If the score is below 85, rewrite the content to perfectly match the persona while maintaining the medical facts.
 4. If the score is 85 or above, return the content as is.
+5. **IMPORTANT**: Ensure NO bolding or asterisks are in the final content.
 
 Return your response in JSON format.
 `;
