@@ -1,5 +1,97 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import Mistral from "@mistralai/mistralai";
 import { GenerationInputs, GenerationResult, MultiFormatContent, CarouselSlide } from "../types";
+
+// ============================================
+// MULTI-PROVIDER API KEY MANAGEMENT
+// ============================================
+
+interface APIKey {
+  key: string;
+  provider: 'gemini' | 'mistral';
+  index: number;
+}
+
+// Load all available API keys from environment
+function loadAvailableKeys(): APIKey[] {
+  const keys: APIKey[] = [];
+
+  // Load Gemini keys (priority provider)
+  const geminiKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5
+  ];
+
+  geminiKeys.forEach((key, index) => {
+    if (key && key.trim() && !key.includes('your_')) {
+      keys.push({ key: key.trim(), provider: 'gemini', index: index + 1 });
+    }
+  });
+
+  // Load Mistral keys (fallback provider)
+  const mistralKeys = [
+    process.env.MISTRAL_API_KEY,
+    process.env.MISTRAL_API_KEY_2,
+    process.env.MISTRAL_API_KEY_3,
+    process.env.MISTRAL_API_KEY_4,
+    process.env.MISTRAL_API_KEY_5
+  ];
+
+  mistralKeys.forEach((key, index) => {
+    if (key && key.trim() && !key.includes('your_')) {
+      keys.push({ key: key.trim(), provider: 'mistral', index: index + 1 });
+    }
+  });
+
+  return keys;
+}
+
+// Detect if error is a quota/rate limit error
+function isQuotaError(error: any): boolean {
+  const errorStr = JSON.stringify(error).toLowerCase();
+  return (
+    errorStr.includes('quota') ||
+    errorStr.includes('rate limit') ||
+    errorStr.includes('rate_limit') ||
+    errorStr.includes('resource exhausted') ||
+    errorStr.includes('429') ||
+    (error.status && error.status === 429)
+  );
+}
+
+// Provider-agnostic content generation
+async function generateWithProvider(
+  provider: 'gemini' | 'mistral',
+  apiKey: string,
+  model: string,
+  prompt: string,
+  config: any
+): Promise<string> {
+  if (provider === 'gemini') {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config
+    });
+    return response.text || "";
+  } else {
+    // Mistral provider
+    const client = new Mistral({ apiKey });
+    const chatResponse = await client.chat.complete({
+      model: 'mistral-large-latest',
+      messages: [
+        { role: 'system', content: config.systemInstruction || '' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: config.temperature || 0.7
+    });
+    return chatResponse.choices?.[0]?.message?.content || "";
+  }
+}
 
 const SYSTEM_INSTRUCTION = `You are MedCopy, a medically grounded content generation engine.
 
@@ -54,14 +146,34 @@ OUTPUT REQUIREMENTS
 `;
 
 export const generateMedicalCopy = async (inputs: GenerationInputs): Promise<GenerationResult> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please select a valid API Key.");
+  const availableKeys = loadAvailableKeys();
+
+  if (availableKeys.length === 0) {
+    throw new Error("No API keys configured. Please add at least one GEMINI_API_KEY or MISTRAL_API_KEY to your .env.local file.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  let lastError: any = null;
+  let currentKeyIndex = 0;
 
-  const citationInstruction = inputs.includeCitations 
-    ? `
+  // Try each available key in order
+  while (currentKeyIndex < availableKeys.length) {
+    const currentKey = availableKeys[currentKeyIndex];
+
+    try {
+      console.log(`[API Key Rotation] Trying ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
+
+      // Use the current key for generation
+      const ai = currentKey.provider === 'gemini'
+        ? new GoogleGenAI({ apiKey: currentKey.key })
+        : null;
+
+      // For Mistral, we'll handle it differently in each generation call
+      // For now, set process.env.API_KEY for backward compatibility
+      process.env.API_KEY = currentKey.key;
+      process.env.CURRENT_PROVIDER = currentKey.provider;
+
+      const citationInstruction = inputs.includeCitations
+        ? `
 ━━━━━━━━━━━━━━━━━━
 CITATION INJECTION ENGINE
 ━━━━━━━━━━━━━━━━━━
@@ -69,11 +181,11 @@ Where a medical claim is made, attach a citation if available based on the provi
 • Use numbered references inline (e.g. "Sleep deprivation is a known trigger for postpartum psychosis¹").
 • Append a "References" section at the end if citations are used.
 • Do not fabricate sources. Only cite what is explicitly in the context provided below.
-` 
-    : "";
+`
+        : "";
 
-  const hashtagInstruction = inputs.includeHashtags
-    ? `
+      const hashtagInstruction = inputs.includeHashtags
+        ? `
 ━━━━━━━━━━━━━━━━━━
 HASHTAG OPTIMIZATION
 ━━━━━━━━━━━━━━━━━━
@@ -82,9 +194,9 @@ Generate 3-5 high-quality, engagement-boosting, SEO-optimized hashtags.
 • Ensure they are relevant to the niche (Medical/HealthTech) and the specific topic.
 • Mix broad (e.g., #MedEd) and specific (e.g., #CardiologyPearls) tags.
 `
-    : "";
+        : "";
 
-  const antiAiStyleInstruction = `
+      const antiAiStyleInstruction = `
 ━━━━━━━━━━━━━━━━━━
 THE AI HUMANISER PROMPT (ANTI-AI FINGERPRINT REWRITER)
 ━━━━━━━━━━━━━━━━━━
@@ -117,13 +229,13 @@ FOLLOW THIS WRITING STYLE:
 “can, may, just, that, very, really, literally, actually, certainly, probably, basically, could, maybe, delve, embark, enlightening, esteemed, shed light, craft, crafting, imagine, realm, game-changer, unlock, discover, skyrocket, abyss, not alone, in a world where, revolutionize, disruptive, utilize, utilizing, dive deep, tapestry, illuminate, unveil, pivotal, intricate, elucidate, hence, furthermore, realm, however, harness, exciting, groundbreaking, cutting-edge, remarkable, it remains to be seen, glimpse into, navigating, landscape, stark, testament, in summary, in conclusion, moreover, boost, skyrocketing, opened up, powerful, inquiries, ever-evolving”
 `;
 
-  try {
-    let currentTopic = inputs.topic;
-    let distilledInsightStr: string | undefined;
+      try {
+        let currentTopic = inputs.topic;
+        let distilledInsightStr: string | undefined;
 
-    // Step 0: Thought Distillation (Optional)
-    if (inputs.enableDistillation) {
-      const distillationPrompt = `
+        // Step 0: Thought Distillation (Optional)
+        if (inputs.enableDistillation) {
+          const distillationPrompt = `
 You are a Thought Distiller. 
 Your goal is to transform messy clinician thoughts into sharp, opinionated insights before writing.
 
@@ -135,27 +247,27 @@ Distill the raw thoughts into one clear, opinionated core insight.
 Do not write the final content yet. 
 Output ONLY the insight.
 `;
-      const distillationResult = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: distillationPrompt,
-        config: { temperature: 0.5 }
-      });
-      
-      distilledInsightStr = distillationResult.text?.trim();
-      
-      if (distilledInsightStr) {
-        // Use the refined insight to drive the generation
-        currentTopic = `CORE INSIGHT: "${distilledInsightStr}"\n\n(Derived from original raw notes: ${inputs.topic})`;
-      }
-    }
+          const distillationResult = await ai.models.generateContent({
+            model: 'gemma-3-27b-it',
+            contents: distillationPrompt,
+            config: { temperature: 0.5 }
+          });
 
-    // Step 1: Handling "Summarizer Mode"
-    if (inputs.summarizerMode) {
-      let summaryPrompt = "";
+          distilledInsightStr = distillationResult.text?.trim();
 
-      if (inputs.examSummarizerMode) {
-        // Special Prompt for Subtitle/Exam Mode
-        summaryPrompt = `
+          if (distilledInsightStr) {
+            // Use the refined insight to drive the generation
+            currentTopic = `CORE INSIGHT: "${distilledInsightStr}"\n\n(Derived from original raw notes: ${inputs.topic})`;
+          }
+        }
+
+        // Step 1: Handling "Summarizer Mode"
+        if (inputs.summarizerMode) {
+          let summaryPrompt = "";
+
+          if (inputs.examSummarizerMode) {
+            // Special Prompt for Subtitle/Exam Mode
+            summaryPrompt = `
 ━━━━━━━━━━━━━━━━━━
 CLINICAL BIOCHEMISTRY / EXAM STRATEGIST MODE (NEET-PG / USMLE)
 ━━━━━━━━━━━━━━━━━━
@@ -192,9 +304,9 @@ FORMATTING RULES:
 
 ${antiAiStyleInstruction}
 `;
-      } else {
-        // Standard Deep Dive Analyzer
-        summaryPrompt = `
+          } else {
+            // Standard Deep Dive Analyzer
+            summaryPrompt = `
 ━━━━━━━━━━━━━━━━━━
 DEEP DIVE ANALYZER & INSIGHT SYNTHESIZER
 ━━━━━━━━━━━━━━━━━━
@@ -228,32 +340,32 @@ ${antiAiStyleInstruction}
 ${citationInstruction}
 ${hashtagInstruction}
 `;
-      }
+          }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: summaryPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.5, // Lower temperature for accurate summarization
-        },
-      });
+          const response = await ai.models.generateContent({
+            model: 'gemma-3-27b-it',
+            contents: summaryPrompt,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.5, // Lower temperature for accurate summarization
+            },
+          });
 
-      const draftContent = response.text || "No summary generated.";
+          const draftContent = response.text || "No summary generated.";
 
-      return {
-        content: draftContent,
-        distilledInsight: distilledInsightStr,
-        driftScore: 95, // Assume high alignment for direct summary tasks
-        driftReasoning: inputs.examSummarizerMode 
-          ? "Exam/Subtitle Mode active. Content structured for NEET-PG/USMLE retention." 
-          : "Summarizer mode active. Content derived directly from source text."
-      };
-    }
+          return {
+            content: draftContent,
+            distilledInsight: distilledInsightStr,
+            driftScore: 95, // Assume high alignment for direct summary tasks
+            driftReasoning: inputs.examSummarizerMode
+              ? "Exam/Subtitle Mode active. Content structured for NEET-PG/USMLE retention."
+              : "Summarizer mode active. Content derived directly from source text."
+          };
+        }
 
-    // Step 2: Handling "Instagram Carousel Mode"
-    if (inputs.carouselMode) {
-      const carouselPrompt = `
+        // Step 2: Handling "Instagram Carousel Mode"
+        if (inputs.carouselMode) {
+          const carouselPrompt = `
 ━━━━━━━━━━━━━━━━━━
 INSTAGRAM CAROUSEL GENERATOR
 ━━━━━━━━━━━━━━━━━━
@@ -282,43 +394,43 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: carouselPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.7,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                slideNumber: { type: Type.INTEGER },
-                title: { type: Type.STRING, description: "Headline for the slide" },
-                content: { type: Type.STRING, description: "Body text for the slide (bullet points or short sentence)" },
-                visualDescription: { type: Type.STRING, description: "Description of the visual/graphic/iconography" }
-              },
-              required: ['slideNumber', 'title', 'content', 'visualDescription']
-            }
-          }
-        },
-      });
+          const response = await ai.models.generateContent({
+            model: 'gemma-3-27b-it',
+            contents: carouselPrompt,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.7,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    slideNumber: { type: Type.INTEGER },
+                    title: { type: Type.STRING, description: "Headline for the slide" },
+                    content: { type: Type.STRING, description: "Body text for the slide (bullet points or short sentence)" },
+                    visualDescription: { type: Type.STRING, description: "Description of the visual/graphic/iconography" }
+                  },
+                  required: ['slideNumber', 'title', 'content', 'visualDescription']
+                }
+              }
+            },
+          });
 
-      const carouselOutput = JSON.parse(response.text || "[]") as CarouselSlide[];
+          const carouselOutput = JSON.parse(response.text || "[]") as CarouselSlide[];
 
-      return {
-        content: "Carousel Generated.",
-        distilledInsight: distilledInsightStr,
-        carouselOutput: carouselOutput,
-        driftScore: 100, // Bypass drift for structural generation
-        driftReasoning: "Carousel mode enabled. Structural JSON generation active."
-      };
-    }
+          return {
+            content: "Carousel Generated.",
+            distilledInsight: distilledInsightStr,
+            carouselOutput: carouselOutput,
+            driftScore: 100, // Bypass drift for structural generation
+            driftReasoning: "Carousel mode enabled. Structural JSON generation active."
+          };
+        }
 
-    // Step 3: Handling "Batch Mode" (Random Posts)
-    if (inputs.batchMode) {
-      const batchPrompt = `
+        // Step 3: Handling "Batch Mode" (Random Posts)
+        if (inputs.batchMode) {
+          const batchPrompt = `
 ━━━━━━━━━━━━━━━━━━
 RANDOM CONTENT BATCH GENERATOR
 ━━━━━━━━━━━━━━━━━━
@@ -340,37 +452,37 @@ ${antiAiStyleInstruction}
 ${citationInstruction}
 ${hashtagInstruction}
 `;
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: batchPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.9, // Higher temperature for randomness
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          }
-        },
-      });
 
-      const batchOutput = JSON.parse(response.text || "[]") as string[];
+          const response = await ai.models.generateContent({
+            model: 'gemma-3-27b-it',
+            contents: batchPrompt,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.9, // Higher temperature for randomness
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              }
+            },
+          });
 
-      return {
-        content: "Batch Generated.",
-        distilledInsight: distilledInsightStr,
-        batchOutput: batchOutput,
-        driftScore: 100, // Bypass drift for batch
-        driftReasoning: "Batch mode enabled. Diversity prioritized."
-      };
-    }
+          const batchOutput = JSON.parse(response.text || "[]") as string[];
 
-    // Step 4: Handling "Multi-Format Exploder"
-    const isMultiFormat = inputs.format === 'Multi-Format Exploder';
+          return {
+            content: "Batch Generated.",
+            distilledInsight: distilledInsightStr,
+            batchOutput: batchOutput,
+            driftScore: 100, // Bypass drift for batch
+            driftReasoning: "Batch mode enabled. Diversity prioritized."
+          };
+        }
 
-    if (isMultiFormat) {
-       const multiFormatPrompt = `
+        // Step 4: Handling "Multi-Format Exploder"
+        const isMultiFormat = inputs.format === 'Multi-Format Exploder';
+
+        if (isMultiFormat) {
+          const multiFormatPrompt = `
 ━━━━━━━━━━━━━━━━━━
 MULTI-FORMAT CONTENT EXPLODER
 ━━━━━━━━━━━━━━━━━━
@@ -394,40 +506,40 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: multiFormatPrompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: 0.7,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              instagram: { type: Type.STRING, description: "Content for Instagram Carousel" },
-              linkedin: { type: Type.STRING, description: "Content for LinkedIn Post" },
-              email: { type: Type.STRING, description: "Content for Patient Email" },
-              twitter: { type: Type.STRING, description: "Content for Tweet Thread" }
+          const response = await ai.models.generateContent({
+            model: 'gemma-3-27b-it',
+            contents: multiFormatPrompt,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.7,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  instagram: { type: Type.STRING, description: "Content for Instagram Carousel" },
+                  linkedin: { type: Type.STRING, description: "Content for LinkedIn Post" },
+                  email: { type: Type.STRING, description: "Content for Patient Email" },
+                  twitter: { type: Type.STRING, description: "Content for Tweet Thread" }
+                },
+                required: ['instagram', 'linkedin', 'email', 'twitter']
+              }
             },
-            required: ['instagram', 'linkedin', 'email', 'twitter']
-          }
-        },
-      });
+          });
 
-      const multiContent = JSON.parse(response.text || "{}") as MultiFormatContent;
-      
-      return {
-        content: "Multi-Format Content Generated. Please check the tabs below.",
-        distilledInsight: distilledInsightStr,
-        multiFormatOutput: multiContent,
-        // Drift detection is skipped for multi-format to preserve JSON structure integrity
-        driftScore: 100, 
-        driftReasoning: "Drift detection bypassed for Multi-Format Exploder mode."
-      };
-    }
+          const multiContent = JSON.parse(response.text || "{}") as MultiFormatContent;
 
-    // Standard Single Format Generation
-    const prompt = `
+          return {
+            content: "Multi-Format Content Generated. Please check the tabs below.",
+            distilledInsight: distilledInsightStr,
+            multiFormatOutput: multiContent,
+            // Drift detection is skipped for multi-format to preserve JSON structure integrity
+            driftScore: 100,
+            driftReasoning: "Drift detection bypassed for Multi-Format Exploder mode."
+          };
+        }
+
+        // Standard Single Format Generation
+        const prompt = `
 ━━━━━━━━━━━━━━━━━━
 INPUTS
 ━━━━━━━━━━━━━━━━━━
@@ -464,20 +576,20 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-    // Step 1: Generate Initial Draft
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7, 
-      },
-    });
+        // Step 1: Generate Initial Draft
+        const response = await ai.models.generateContent({
+          model: 'gemma-3-27b-it',
+          contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+          },
+        });
 
-    const draftContent = response.text || "No content generated.";
+        const draftContent = response.text || "No content generated.";
 
-    // Step 2: Persona Drift Detector
-    const driftPrompt = `
+        // Step 2: Persona Drift Detector
+        const driftPrompt = `
 You are a Persona Drift Detector.
 Your task is to evaluate the provided content against the defined Persona.
 
@@ -503,35 +615,66 @@ INSTRUCTIONS
 Return your response in JSON format.
 `;
 
-    const driftResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: driftPrompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            score: { type: Type.INTEGER, description: "Alignment score from 0-100" },
-            reasoning: { type: Type.STRING, description: "Brief explanation of the score and any drifts detected" },
-            finalContent: { type: Type.STRING, description: "The final content (original if score >= 85, rewritten if < 85)" }
+        const driftResponse = await ai.models.generateContent({
+          model: 'gemma-3-27b-it',
+          contents: driftPrompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                score: { type: Type.INTEGER, description: "Alignment score from 0-100" },
+                reasoning: { type: Type.STRING, description: "Brief explanation of the score and any drifts detected" },
+                finalContent: { type: Type.STRING, description: "The final content (original if score >= 85, rewritten if < 85)" }
+              },
+              required: ['score', 'reasoning', 'finalContent']
+            }
           },
-          required: ['score', 'reasoning', 'finalContent']
-        }
-      },
-    });
+        });
 
-    // Parse JSON result from Step 2
-    const driftResult = JSON.parse(driftResponse.text || "{}");
+        // Parse JSON result from Step 2
+        const driftResult = JSON.parse(driftResponse.text || "{}");
 
-    return {
-      content: driftResult.finalContent || draftContent,
-      driftScore: driftResult.score,
-      driftReasoning: driftResult.reasoning,
-      distilledInsight: distilledInsightStr
-    };
+        // Success! Log and return
+        console.log(`[API Key Rotation] ✓ Success with ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
 
-  } catch (error) {
-    console.error("Gemini Generation Error:", error);
-    throw error;
+        return {
+          content: driftResult.finalContent || draftContent,
+          driftScore: driftResult.score,
+          driftReasoning: driftResult.reasoning,
+          distilledInsight: distilledInsightStr
+        };
+
+      } catch (innerError) {
+        // This is the inner try-catch for the generation logic
+        console.error(`[API Key Rotation] ✗ Error with ${currentKey.provider.toUpperCase()} key #${currentKey.index}:`, innerError);
+        throw innerError;
+      }
+
+    } catch (error) {
+      // Outer try-catch for key rotation
+      lastError = error;
+
+      // Check if this is a quota error
+      if (isQuotaError(error)) {
+        console.warn(`[API Key Rotation] Quota exceeded for ${currentKey.provider.toUpperCase()} key #${currentKey.index}. Trying next key...`);
+        currentKeyIndex++;
+        continue;
+      }
+
+      // If it's not a quota error, throw immediately
+      console.error(`[API Key Rotation] Non-quota error encountered:`, error);
+      throw error;
+    }
   }
+
+  // If we've exhausted all keys, throw a comprehensive error
+  const geminiCount = availableKeys.filter(k => k.provider === 'gemini').length;
+  const mistralCount = availableKeys.filter(k => k.provider === 'mistral').length;
+
+  throw new Error(
+    `All API keys exhausted (${geminiCount} Gemini + ${mistralCount} Mistral = ${availableKeys.length} total). ` +
+    `All keys have hit quota limits. Please wait for quota reset or add more API keys. ` +
+    `Last error: ${lastError?.message || 'Unknown error'}`
+  );
 };
