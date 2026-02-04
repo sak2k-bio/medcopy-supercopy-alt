@@ -1,6 +1,6 @@
 # MASTER.md - MedCopy Quick Configuration Guide
 
-> **Last Updated:** 2026-02-04  
+> **Last Updated:** 2026-02-04 (Google Sheets Integration Fix)  
 > **Purpose:** Quick reference for modifying UI, backend, prompts, and configuration without breaking functionality
 
 ---
@@ -468,6 +468,18 @@ GOOGLE_APPS_SCRIPT_URL=your_apps_script_url_here
 
 **Setup Guide:** See `GOOGLE_SHEETS_INTEGRATION.md`
 
+**⚠️ Important:** These environment variables must be exposed in `vite.config.ts` to work in the browser:
+```typescript
+'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
+'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID)
+```
+
+**Save to Sheets Button:**
+- Available in all modes: Standard, Batch, Multi-Format, and Carousel
+- For batch mode, button appears below all variations
+- First click triggers OAuth authorization
+- Subsequent clicks save content directly to the configured spreadsheet
+
 ### Fallback Hierarchy
 ```
 1. GEMINI_API_KEY (primary)
@@ -512,13 +524,23 @@ This application is **client-side only** with no backend API routes. All API cal
 - Monitor usage quotas
 - Rotate keys regularly
 
-**File:** `vite.config.ts` (Lines 13-24)
+**File:** `vite.config.ts` (Lines 13-26)
 
 ```typescript
 define: {
   'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
   'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-  // ... all keys exposed to client
+  'process.env.GEMINI_API_KEY_2': JSON.stringify(env.GEMINI_API_KEY_2),
+  'process.env.GEMINI_API_KEY_3': JSON.stringify(env.GEMINI_API_KEY_3),
+  'process.env.GEMINI_API_KEY_4': JSON.stringify(env.GEMINI_API_KEY_4),
+  'process.env.GEMINI_API_KEY_5': JSON.stringify(env.GEMINI_API_KEY_5),
+  'process.env.MISTRAL_API_KEY': JSON.stringify(env.MISTRAL_API_KEY),
+  'process.env.MISTRAL_API_KEY_2': JSON.stringify(env.MISTRAL_API_KEY_2),
+  'process.env.MISTRAL_API_KEY_3': JSON.stringify(env.MISTRAL_API_KEY_3),
+  'process.env.MISTRAL_API_KEY_4': JSON.stringify(env.MISTRAL_API_KEY_4),
+  'process.env.MISTRAL_API_KEY_5': JSON.stringify(env.MISTRAL_API_KEY_5),
+  'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
+  'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID)
 }
 ```
 

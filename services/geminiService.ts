@@ -455,19 +455,19 @@ ${hashtagInstruction}
 
           const response = await ai.models.generateContent({
             model: 'gemma-3-27b-it',
-            contents: batchPrompt,
+            contents: `${SYSTEM_INSTRUCTION}\n\n${batchPrompt}`,
             config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-              temperature: 0.9, // Higher temperature for randomness
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-              }
+              temperature: 0.9 // Higher temperature for randomness
             },
           });
 
-          const batchOutput = JSON.parse(response.text || "[]") as string[];
+          // Parse JSON - extract from markdown code blocks if present
+          let jsonText = response.text || "[]";
+          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[1];
+          }
+          const batchOutput = JSON.parse(jsonText.trim()) as string[];
 
           return {
             content: "Batch Generated.",
@@ -508,25 +508,19 @@ ${hashtagInstruction}
 
           const response = await ai.models.generateContent({
             model: 'gemma-3-27b-it',
-            contents: multiFormatPrompt,
+            contents: `${SYSTEM_INSTRUCTION}\n\n${multiFormatPrompt}`,
             config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-              temperature: 0.7,
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  instagram: { type: Type.STRING, description: "Content for Instagram Carousel" },
-                  linkedin: { type: Type.STRING, description: "Content for LinkedIn Post" },
-                  email: { type: Type.STRING, description: "Content for Patient Email" },
-                  twitter: { type: Type.STRING, description: "Content for Tweet Thread" }
-                },
-                required: ['instagram', 'linkedin', 'email', 'twitter']
-              }
+              temperature: 0.7
             },
           });
 
-          const multiContent = JSON.parse(response.text || "{}") as MultiFormatContent;
+          // Parse JSON - extract from markdown code blocks if present
+          let jsonText = response.text || "{}";
+          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[1];
+          }
+          const multiContent = JSON.parse(jsonText.trim()) as MultiFormatContent;
 
           return {
             content: "Multi-Format Content Generated. Please check the tabs below.",
@@ -579,9 +573,8 @@ ${hashtagInstruction}
         // Step 1: Generate Initial Draft
         const response = await ai.models.generateContent({
           model: 'gemma-3-27b-it',
-          contents: prompt,
+          contents: `${SYSTEM_INSTRUCTION}\n\n${prompt}`,
           config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
             temperature: 0.7,
           },
         });
@@ -619,21 +612,17 @@ Return your response in JSON format.
           model: 'gemma-3-27b-it',
           contents: driftPrompt,
           config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                score: { type: Type.INTEGER, description: "Alignment score from 0-100" },
-                reasoning: { type: Type.STRING, description: "Brief explanation of the score and any drifts detected" },
-                finalContent: { type: Type.STRING, description: "The final content (original if score >= 85, rewritten if < 85)" }
-              },
-              required: ['score', 'reasoning', 'finalContent']
-            }
+            temperature: 0.7
           },
         });
 
-        // Parse JSON result from Step 2
-        const driftResult = JSON.parse(driftResponse.text || "{}");
+        // Parse JSON - extract from markdown code blocks if present
+        let driftJsonText = driftResponse.text || "{}";
+        const driftJsonMatch = driftJsonText.match(/```json\s*([\s\S]*?)\s*```/) || driftJsonText.match(/```\s*([\s\S]*?)\s*```/);
+        if (driftJsonMatch) {
+          driftJsonText = driftJsonMatch[1];
+        }
+        const driftResult = JSON.parse(driftJsonText.trim());
 
         // Success! Log and return
         console.log(`[API Key Rotation] ✓ Success with ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
