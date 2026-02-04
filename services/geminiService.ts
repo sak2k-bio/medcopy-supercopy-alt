@@ -1,5 +1,4 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import Mistral from "@mistralai/mistralai";
 import { GenerationInputs, GenerationResult, MultiFormatContent, CarouselSlide } from "../types";
 
 // ============================================
@@ -8,7 +7,7 @@ import { GenerationInputs, GenerationResult, MultiFormatContent, CarouselSlide }
 
 interface APIKey {
   key: string;
-  provider: 'gemini' | 'mistral';
+  provider: 'gemini';
   index: number;
 }
 
@@ -31,20 +30,8 @@ function loadAvailableKeys(): APIKey[] {
     }
   });
 
-  // Load Mistral keys (fallback provider)
-  const mistralKeys = [
-    process.env.MISTRAL_API_KEY,
-    process.env.MISTRAL_API_KEY_2,
-    process.env.MISTRAL_API_KEY_3,
-    process.env.MISTRAL_API_KEY_4,
-    process.env.MISTRAL_API_KEY_5
-  ];
-
-  mistralKeys.forEach((key, index) => {
-    if (key && key.trim() && !key.includes('your_')) {
-      keys.push({ key: key.trim(), provider: 'mistral', index: index + 1 });
-    }
-  });
+  // Mistral fallback removed - package not installed
+  // To enable Mistral fallback, install @mistralai/mistralai package
 
   return keys;
 }
@@ -62,35 +49,21 @@ function isQuotaError(error: any): boolean {
   );
 }
 
-// Provider-agnostic content generation
+// Provider-agnostic content generation (Gemini only)
 async function generateWithProvider(
-  provider: 'gemini' | 'mistral',
+  provider: 'gemini',
   apiKey: string,
   model: string,
   prompt: string,
   config: any
 ): Promise<string> {
-  if (provider === 'gemini') {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config
-    });
-    return response.text || "";
-  } else {
-    // Mistral provider
-    const client = new Mistral({ apiKey });
-    const chatResponse = await client.chat.complete({
-      model: 'mistral-large-latest',
-      messages: [
-        { role: 'system', content: config.systemInstruction || '' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: config.temperature || 0.7
-    });
-    return chatResponse.choices?.[0]?.message?.content || "";
-  }
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+    config
+  });
+  return response.text || "";
 }
 
 const SYSTEM_INSTRUCTION = `You are MedCopy, a medically grounded content generation engine.
@@ -659,10 +632,9 @@ Return your response in JSON format.
 
   // If we've exhausted all keys, throw a comprehensive error
   const geminiCount = availableKeys.filter(k => k.provider === 'gemini').length;
-  const mistralCount = availableKeys.filter(k => k.provider === 'mistral').length;
 
   throw new Error(
-    `All API keys exhausted (${geminiCount} Gemini + ${mistralCount} Mistral = ${availableKeys.length} total). ` +
+    `All API keys exhausted (${geminiCount} Gemini keys tried, ${availableKeys.length} total). ` +
     `All keys have hit quota limits. Please wait for quota reset or add more API keys. ` +
     `Last error: ${lastError?.message || 'Unknown error'}`
   );
