@@ -53,28 +53,33 @@ export const saveToSheet = async (
   result: GenerationResult,
   activeFormat?: string
 ): Promise<boolean> => {
-  if (!accessToken) {
+  if (process.env.GOOGLE_APPS_SCRIPT_URL) {
+    // === APPS SCRIPT PATH ===
+    // If an Apps Script URL is provided, we use that instead of the direct Sheets API.
+    // This allows for custom server-side logic and avoids client-side OAuth popups if configured correctly.
+  } else if (!accessToken) {
+    // === DIRECT API PATH ===
     triggerAuth();
     return false;
   }
 
   const timestamp = new Date().toLocaleString();
-  
+
   // Format content based on type (Batch, Carousel, Standard)
   let finalContent = "";
   let finalFormat = inputs.format;
 
   if (result.multiFormatOutput && activeFormat) {
-     finalContent = (result.multiFormatOutput as any)[activeFormat];
-     finalFormat = `${inputs.format} (${activeFormat})`;
+    finalContent = (result.multiFormatOutput as any)[activeFormat];
+    finalFormat = `${inputs.format} (${activeFormat})`;
   } else if (result.carouselOutput) {
-     finalContent = result.carouselOutput.map(s => `[Slide ${s.slideNumber}] ${s.title}: ${s.content}`).join("\n");
-     finalFormat = "Instagram Carousel";
+    finalContent = result.carouselOutput.map(s => `[Slide ${s.slideNumber}] ${s.title}: ${s.content}`).join("\n");
+    finalFormat = "Instagram Carousel";
   } else if (result.batchOutput) {
-     finalContent = result.batchOutput.join("\n\n---\n\n");
-     finalFormat = `Batch (${inputs.batchCount})`;
+    finalContent = result.batchOutput.join("\n\n---\n\n");
+    finalFormat = `Batch (${inputs.batchCount})`;
   } else {
-     finalContent = result.content;
+    finalContent = result.content;
   }
 
   // Row Data: [Timestamp, Persona, Topic, Format, Audience, Drift Score, Content]
@@ -95,17 +100,45 @@ export const saveToSheet = async (
   };
 
   try {
-    const response = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=USER_ENTERED`,
-      {
+    let response;
+
+    if (process.env.GOOGLE_APPS_SCRIPT_URL) {
+      // Send to Apps Script Web App
+      // Note: Apps Script redirect handling might cause CORS issues in strict browsers.
+      // Using 'no-cors' allows the request to succeed but we can't read the response.
+      // However, usually 'POST' to a Web App executed as 'Me' works with standard CORS if the script returns text/json correctly.
+
+      const payload = {
+        ...inputs,
+        ...result,
+        content: finalContent, // Use the formatted content
+        format: finalFormat,   // Use the formatted format label
+        driftScore: result.driftScore,
+        timestamp: timestamp
+      };
+
+      response = await fetch(process.env.GOOGLE_APPS_SCRIPT_URL, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+          "Content-Type": "text/plain;charset=utf-8", // text/plain often avoids preflight options request which Apps Script doesn't handle well
         },
-        body: JSON.stringify(body),
-      }
-    );
+        body: JSON.stringify(payload),
+      });
+
+    } else {
+      // Send to Direct Google Sheets API
+      response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=USER_ENTERED`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
+    }
 
     if (response.ok) {
       return true;
