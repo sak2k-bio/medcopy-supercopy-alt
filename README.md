@@ -99,18 +99,28 @@ GOOGLE_SPREADSHEET_ID=your_spreadsheet_id_here
 
 **Setup Guide:** See [GOOGLE_SHEETS_INTEGRATION.md](GOOGLE_SHEETS_INTEGRATION.md) for detailed instructions.
 
-## Recent Updates (2026-02-04)
+## Recent Updates (2026-02-05)
 
-### Google Sheets Integration Fix ✅
-- **Fixed**: Environment variables now properly exposed to client-side code
-- **Added**: Save to Sheets button for batch mode
-- **Updated**: `vite.config.ts` to include `GOOGLE_CLIENT_ID` and `GOOGLE_SPREADSHEET_ID`
+### Info Tooltips ✅
+- **Added**: Informational tooltips next to key settings (Persona, Format, Audience, Topic, Medical Context)
+- **Component**: New `InfoTooltip.tsx` component with hover functionality
+- **Styling**: Full light/dark mode support
 
-### Gemini API Compatibility ✅
-- **Removed**: Unsupported `systemInstruction` parameter for Gemma model
-- **Removed**: JSON mode (`responseMimeType`, `responseSchema`) - now using manual parsing
-- **Updated**: System instructions now prepended to prompt content
-- **Added**: Manual JSON parsing with markdown code block extraction
+### Auto-Save Implementation ✅
+- **Added**: Automatic saving to Google Sheets when content is generated
+- **Implementation**: React `useEffect` hook triggers save automatically
+- **Auth Bypass**: Apps Script proxy bypasses OAuth popup for seamless background saves
+- **Config**: Auto-loads credentials from `.env` file on startup
+
+### Drift Detection Fix ✅
+- **Fixed**: JSON parsing errors no longer crash the application
+- **Added**: JSON sanitizer for control characters
+- **Added**: Fallback mechanism returns original content if parsing fails
+
+### Carousel Generation Fix ✅
+- **Fixed**: Instagram Carousel now uses robust regex-based JSON extraction
+- **Removed**: Strict `responseSchema` that caused 400 errors with certain models
+- **Added**: Manual JSON parsing with markdown code block support
 
 ## Features
 

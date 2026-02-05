@@ -79,9 +79,9 @@ export default function App() {
       setError("API Key not found. Please verify environment configuration.");
     }
 
-    // Load saved sheet config from localStorage
-    const savedClientId = localStorage.getItem('medcopy_google_client_id');
-    const savedSheetId = localStorage.getItem('medcopy_google_sheet_id');
+    // Load saved sheet config from localStorage OR Environment Variables
+    const savedClientId = localStorage.getItem('medcopy_google_client_id') || process.env.GOOGLE_CLIENT_ID || '';
+    const savedSheetId = localStorage.getItem('medcopy_google_sheet_id') || process.env.GOOGLE_SPREADSHEET_ID || '';
 
     if (savedClientId && savedSheetId) {
       setSheetConfig({ clientId: savedClientId, spreadsheetId: savedSheetId });
@@ -89,6 +89,25 @@ export default function App() {
       setTimeout(() => initGoogleAuth(savedClientId), 1000);
     }
   }, []);
+
+  // Auto-Save Effect
+  useEffect(() => {
+    // Debug log to trace Auto-Save conditions
+    console.log("[App.tsx] Auto-Save Check:", {
+      hasResult: !!generatedResult,
+      hasSheetId: !!sheetConfig.spreadsheetId,
+      hasClientId: !!sheetConfig.clientId,
+      isSaving: isSheetSaving,
+      alreadySaved: sheetSaveSuccess
+    });
+
+    if (generatedResult && sheetConfig.spreadsheetId && sheetConfig.clientId) {
+      if (!isSheetSaving && !sheetSaveSuccess) {
+        console.log("[App.tsx] Triggering Auto-Save...");
+        handleSaveToSheet();
+      }
+    }
+  }, [generatedResult]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const target = e.target;
@@ -227,7 +246,11 @@ export default function App() {
 
     setIsSheetSaving(true);
     try {
-      if (!isAuthorized()) {
+      // Only trigger client-side auth if we are NOT using the Apps Script Proxy
+      // AND we don't have an access token yet.
+      const hasAppsScript = !!process.env.GOOGLE_APPS_SCRIPT_URL;
+
+      if (!hasAppsScript && !isAuthorized()) {
         triggerAuth();
         // Wait for auth flow (in reality, we'd wait for a callback, but for simplicity we stop here and ask user to click again after popup)
         setIsSheetSaving(false);

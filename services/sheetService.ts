@@ -103,27 +103,34 @@ export const saveToSheet = async (
     let response;
 
     if (process.env.GOOGLE_APPS_SCRIPT_URL) {
-      // Send to Apps Script Web App
-      // Note: Apps Script redirect handling might cause CORS issues in strict browsers.
-      // Using 'no-cors' allows the request to succeed but we can't read the response.
-      // However, usually 'POST' to a Web App executed as 'Me' works with standard CORS if the script returns text/json correctly.
+      console.log("[saveToSheet] Found Apps Script URL, attempting server-side save...");
 
       const payload = {
         ...inputs,
         ...result,
-        content: finalContent, // Use the formatted content
-        format: finalFormat,   // Use the formatted format label
+        content: finalContent,
+        format: finalFormat,
         driftScore: result.driftScore,
         timestamp: timestamp
       };
 
-      response = await fetch(process.env.GOOGLE_APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8", // text/plain often avoids preflight options request which Apps Script doesn't handle well
-        },
-        body: JSON.stringify(payload),
-      });
+      console.log("[saveToSheet] Payload ready:", JSON.stringify(payload).substring(0, 100) + "...");
+
+      try {
+        response = await fetch(process.env.GOOGLE_APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+          },
+          body: JSON.stringify(payload),
+        });
+        console.log("[saveToSheet] Fetch sent. Status:", response.status, "Type:", response.type);
+      } catch (fetchError) {
+        console.error("[saveToSheet] Apps Script Fetch Failed (Likely CORS or Network):", fetchError);
+        // Fallback to direct API if Apps Script fails?
+        // For now, let's just throw so we know.
+        throw fetchError;
+      }
 
     } else {
       // Send to Direct Google Sheets API

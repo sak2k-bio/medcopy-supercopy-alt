@@ -5,6 +5,33 @@
 
 ---
 
+## Recent Fixes (2026-02-05)
+
+### 1. Info Tooltips
+- **Added**: Informational tooltips next to key UI elements (Persona, Content Format, Audience Risk Filter, Topic, Medical Context)
+- **Component**: `components/InfoTooltip.tsx`
+- **Styling**: Supports both light and dark modes with hover functionality
+
+### 2. Carousel JSON Parsing Fix
+- **Fixed**: Instagram Carousel generation now uses robust regex-based JSON extraction
+- **Issue**: Previous strict schema parsing caused 400 errors with certain Gemini models
+- **Solution**: Manual JSON extraction from markdown code blocks with fallback handling
+
+### 3. Drift Detection Crash Fix
+- **Fixed**: JSON parsing errors in Drift Detection phase no longer crash the app
+- **Added**: JSON sanitizer to clean control characters before parsing
+- **Added**: Try-catch block with fallback to original content (Drift Score 100) if parsing fails
+- **File**: `services/geminiService.ts`
+
+### 4. Auto-Save Implementation
+- **Added**: True auto-save functionality - content automatically saves to Google Sheets after generation
+- **Implementation**: React `useEffect` hook triggers save when `generatedResult` updates
+- **Auth Fix**: Bypasses client-side OAuth popup when Apps Script URL is configured
+- **Config Loading**: Automatically loads Sheet ID and Client ID from `.env` file
+- **Debug Logging**: Console logs show auto-save trigger conditions
+
+---
+
 ## Table of Contents
 
 1. [UI Components & Styling](#1-ui-components--styling)

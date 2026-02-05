@@ -339,12 +339,24 @@ ${hashtagInstruction}
 
         // Step 2: Handling "Instagram Carousel Mode"
         if (inputs.carouselMode) {
+
           const carouselPrompt = `
 ━━━━━━━━━━━━━━━━━━
 INSTAGRAM CAROUSEL GENERATOR
 ━━━━━━━━━━━━━━━━━━
 Using the Persona defined below, generate a structured, slide-by-slide Instagram Carousel based on the Topic.
 Total Slides: 5 to 10.
+
+OUTPUT FORMAT RULES:
+1. You MUST return a VALID JSON array.
+2. The JSON must be enclosed in markdown code blocks: \`\`\`json [ ... ] \`\`\`.
+3. Use this exact schema for each slide:
+   {
+     "slideNumber": number,
+     "title": "string",
+     "content": "string",
+     "visualDescription": "string"
+   }
 
 STRUCTURE:
 1. Slide 1: The Hook (Viral, scroll-stopping title).
@@ -585,9 +597,14 @@ INSTRUCTIONS
 2. Assign an alignment score from 0-100.
 3. If the score is below 85, rewrite the content to perfectly match the persona while maintaining the medical facts.
 4. If the score is 85 or above, return the content as is.
-5. **IMPORTANT**: Ensure NO bolding or asterisks are in the final content.
+6. **FORMATTING**: RETURN PURE MINIFIED JSON. Do not use unescaped newlines inside strings.
 
-Return your response in JSON format.
+Return your response in this JSON format:
+{
+  "score": number,
+  "reasoning": "string",
+  "finalContent": "string"
+}
 `;
 
         const driftResponse = await ai.models.generateContent({
@@ -604,7 +621,28 @@ Return your response in JSON format.
         if (driftJsonMatch) {
           driftJsonText = driftJsonMatch[1];
         }
-        const driftResult = JSON.parse(driftJsonText.trim());
+
+        let driftResult;
+        try {
+          // Basic sanitization for control characters (often causes SyntaxError)
+          const sanitizedJson = driftJsonText.replace(/[\x00-\x1F\x7F-\x9F]/g, (char) => {
+            if (char === '\n') return '\\n';
+            if (char === '\r') return '';
+            if (char === '\t') return '\\t';
+            return '';
+          });
+          driftResult = JSON.parse(sanitizedJson);
+        } catch (parseError) {
+          console.warn("[Drift Detection] JSON Parsing Failed:", parseError);
+          console.warn("[Drift Detection] Raw Text:", driftJsonText);
+
+          // FALLBACK: Return original content if validation fails
+          driftResult = {
+            finalContent: draftContent,
+            score: 100,
+            reasoning: "Validation JSON parsing failed. Returned original draft."
+          };
+        }
 
         // Success! Log and return
         console.log(`[API Key Rotation] ✓ Success with ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
