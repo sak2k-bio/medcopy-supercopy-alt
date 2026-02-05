@@ -317,9 +317,8 @@ ${hashtagInstruction}
 
           const response = await ai.models.generateContent({
             model: 'gemma-3-27b-it',
-            contents: summaryPrompt,
+            contents: `${SYSTEM_INSTRUCTION}\n\n${summaryPrompt}`,
             config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
               temperature: 0.5, // Lower temperature for accurate summarization
             },
           });
@@ -369,9 +368,8 @@ ${hashtagInstruction}
 
           const response = await ai.models.generateContent({
             model: 'gemma-3-27b-it',
-            contents: carouselPrompt,
+            contents: `${SYSTEM_INSTRUCTION}\n\n${carouselPrompt}`,
             config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
               temperature: 0.7,
               responseMimeType: 'application/json',
               responseSchema: {
