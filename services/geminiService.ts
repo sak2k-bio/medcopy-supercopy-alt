@@ -145,6 +145,8 @@ export const generateMedicalCopy = async (inputs: GenerationInputs): Promise<Gen
       process.env.API_KEY = currentKey.key;
       process.env.CURRENT_PROVIDER = currentKey.provider;
 
+      console.log(`[MedCopy] Generating with ${currentKey.provider} (Key #${currentKey.index}) | Carousel: ${inputs.carouselMode}`);
+
       const citationInstruction = inputs.includeCitations
         ? `
 ━━━━━━━━━━━━━━━━━━
@@ -371,24 +373,33 @@ ${hashtagInstruction}
             contents: `${SYSTEM_INSTRUCTION}\n\n${carouselPrompt}`,
             config: {
               temperature: 0.7,
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    slideNumber: { type: Type.INTEGER },
-                    title: { type: Type.STRING, description: "Headline for the slide" },
-                    content: { type: Type.STRING, description: "Body text for the slide (bullet points or short sentence)" },
-                    visualDescription: { type: Type.STRING, description: "Description of the visual/graphic/iconography" }
-                  },
-                  required: ['slideNumber', 'title', 'content', 'visualDescription']
-                }
-              }
+              // Removed strict schema parsing to avoid 400 errors with Gemma 2/3 models on some endpoints
             },
           });
 
-          const carouselOutput = JSON.parse(response.text || "[]") as CarouselSlide[];
+          // Parse JSON - extract from markdown code blocks if present
+          let jsonText = response.text || "[]";
+          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[1];
+          }
+
+          let carouselOutput: CarouselSlide[] = [];
+          try {
+            carouselOutput = JSON.parse(jsonText.trim()) as CarouselSlide[];
+          } catch (e) {
+            console.error("Failed to parse Carousel JSON:", jsonText);
+            // Fallback: Try to find a list if the JSON failed
+            if (jsonText.includes('[') && jsonText.includes(']')) {
+              try {
+                const startRaw = jsonText.indexOf('[');
+                const endRaw = jsonText.lastIndexOf(']');
+                carouselOutput = JSON.parse(jsonText.substring(startRaw, endRaw + 1));
+              } catch (innerE) {
+                carouselOutput = [];
+              }
+            }
+          }
 
           return {
             content: "Carousel Generated.",

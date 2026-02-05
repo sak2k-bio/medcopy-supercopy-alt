@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
       'process.env.MISTRAL_API_KEY_4': JSON.stringify(env.MISTRAL_API_KEY_4),
       'process.env.MISTRAL_API_KEY_5': JSON.stringify(env.MISTRAL_API_KEY_5),
       'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
-      'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID)
+      'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID),
+      'process.env.GOOGLE_APPS_SCRIPT_URL': JSON.stringify(env.GOOGLE_APPS_SCRIPT_URL)
     },
     resolve: {
       alias: {

@@ -1,6 +1,6 @@
 # MASTER.md - MedCopy Quick Configuration Guide
 
-> **Last Updated:** 2026-02-04 (Google Sheets Integration Fix)  
+> **Last Updated:** 2026-02-05 (Tailwind v3 Local, Apps Script Auto-Save, Carousel Fix)  
 > **Purpose:** Quick reference for modifying UI, backend, prompts, and configuration without breaking functionality
 
 ---
@@ -56,7 +56,7 @@ className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-2
 ## 2. Colors & Theme
 
 ### Primary Brand Color: **Teal**
-**File:** `index.html`, `App.tsx`, `Header.tsx`, `PresetSelector.tsx`
+**File:** `index.css`, `App.tsx`, `Header.tsx`, `PresetSelector.tsx`
 
 **Color Palette:**
 ```css
@@ -230,7 +230,13 @@ Your job is to generate persona-driven medical or health-tech content that is:
 • Written for a clearly defined audience
 • Human, credible, and publication-ready
 ...
+```typescript
+const SYSTEM_INSTRUCTION = `You are MedCopy, a medically grounded content generation engine...`;
 ```
+
+**Note:** The system instruction is now prepended to the user prompt content to ensure compatibility with all Gemini models (including `gemma-3-27b-it`) which may not support the dedicated `systemInstruction` parameter.
+
+**Carousel Mode Note:** Carousel generation now uses robust Regex-based JSON extraction instead of strict `responseSchema` to prevent 400 errors with certain models.
 
 **Key Sections:**
 1. **Identity & Purpose** (Lines 98-104)
@@ -471,8 +477,14 @@ GOOGLE_APPS_SCRIPT_URL=your_apps_script_url_here
 **⚠️ Important:** These environment variables must be exposed in `vite.config.ts` to work in the browser:
 ```typescript
 'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
-'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID)
+'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
+'process.env.GOOGLE_SPREADSHEET_ID': JSON.stringify(env.GOOGLE_SPREADSHEET_ID),
+'process.env.GOOGLE_APPS_SCRIPT_URL': JSON.stringify(env.GOOGLE_APPS_SCRIPT_URL)
 ```
+
+### Auto-Save Feature (Apps Script)
+- If `GOOGLE_APPS_SCRIPT_URL` is set, the "Save to Sheets" button will use the Apps Script Web App for a seamless server-side save (bypassing the client-side OAuth popup for frequent saves).
+- If not set, it falls back to the direct Google Sheets API (requires OAuth popup).
 
 **Save to Sheets Button:**
 - Available in all modes: Standard, Batch, Multi-Format, and Carousel
@@ -724,9 +736,9 @@ npm run preview
 - **Dark Mode:** Automatically enabled via `class="dark"` in `index.html`
 - **Font:** Inter (Google Fonts) loaded in `index.html`
 - **Icons:** Lucide React (imported via ESM)
-- **Styling:** Tailwind CSS (CDN version)
-- **State Management:** React useState (no external state library)
+- **Styling:** Tailwind CSS v3.4 (Local Installation, not CDN)
 - **Build Tool:** Vite
+- **State Management:** React useState (no external state library)
 
 ---
 
