@@ -36,6 +36,7 @@ import {
   FileSearch,
   GraduationCap
 } from 'lucide-react';
+import { InfoTooltip } from './components/InfoTooltip';
 
 export default function App() {
   const [inputs, setInputs] = useState<GenerationInputs>({
@@ -336,6 +337,7 @@ export default function App() {
                   <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                     <UserIcon className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                     Select Persona
+                    <InfoTooltip text="Choose the voice and expertise level for the content generation." />
                   </h2>
 
                   <button
@@ -383,6 +385,7 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                     <MessageSquare size={14} />
                     Content Format
+                    <InfoTooltip text="Select structure (e.g. Post, Thread, Email). Disabled in specialized modes." />
                   </label>
                   <select
                     name="format"
@@ -404,6 +407,7 @@ export default function App() {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5 text-amber-700 dark:text-amber-500">
                     <ShieldAlert size={14} />
                     Audience Risk Filter
+                    <InfoTooltip text="Adjusts safety guardrails and technical depth based on who is reading." />
                   </label>
                   <select
                     name="audience"
@@ -426,6 +430,7 @@ export default function App() {
                     {inputs.summarizerMode
                       ? 'Summary Goal / Focus (Optional)'
                       : (inputs.batchMode ? 'Keywords / Core Theme' : (inputs.carouselMode ? 'Carousel Topic' : 'Topic / Raw Thought'))}
+                    <InfoTooltip text="The core subject or idea you want the AI to write about." />
                   </label>
 
                   <div className="flex gap-4">
@@ -573,6 +578,7 @@ export default function App() {
                   <label className={`block text-sm font-medium flex items-center gap-1.5 ${inputs.summarizerMode ? 'text-orange-700 dark:text-orange-400 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>
                     <BookOpen size={14} />
                     {inputs.summarizerMode ? 'Source Text to Summarize (Required)' : 'Medical Context (RAG / Reference)'}
+                    <InfoTooltip text={inputs.summarizerMode ? "Paste the full text here." : "Paste facts/studies here. AI will strictly adhere to this context."} />
                   </label>
                   <div className="flex items-center gap-4">
                     {/* Hashtags Checkbox */}
