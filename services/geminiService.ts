@@ -1,71 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GenerationInputs, GenerationResult, MultiFormatContent, CarouselSlide } from "../types";
 
-// ============================================
-// MULTI-PROVIDER API KEY MANAGEMENT
-// ============================================
-
-interface APIKey {
-  key: string;
-  provider: 'gemini';
-  index: number;
-}
-
-// Load all available API keys from environment
-function loadAvailableKeys(): APIKey[] {
-  const keys: APIKey[] = [];
-
-  // Load Gemini keys (priority provider)
-  const geminiKeys = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_API_KEY_4,
-    process.env.GEMINI_API_KEY_5
-  ];
-
-  geminiKeys.forEach((key, index) => {
-    if (key && key.trim() && !key.includes('your_')) {
-      keys.push({ key: key.trim(), provider: 'gemini', index: index + 1 });
-    }
-  });
-
-  // Mistral fallback removed - package not installed
-  // To enable Mistral fallback, install @mistralai/mistralai package
-
-  return keys;
-}
-
-// Detect if error is a quota/rate limit error
-function isQuotaError(error: any): boolean {
-  const errorStr = JSON.stringify(error).toLowerCase();
-  return (
-    errorStr.includes('quota') ||
-    errorStr.includes('rate limit') ||
-    errorStr.includes('rate_limit') ||
-    errorStr.includes('resource exhausted') ||
-    errorStr.includes('429') ||
-    (error.status && error.status === 429)
-  );
-}
-
-// Provider-agnostic content generation (Gemini only)
-async function generateWithProvider(
-  provider: 'gemini',
-  apiKey: string,
-  model: string,
-  prompt: string,
-  config: any
-): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config
-  });
-  return response.text || "";
-}
-
 const SYSTEM_INSTRUCTION = `You are MedCopy, a medically grounded content generation engine.
 
 Your job is to generate persona-driven medical or health-tech content that is:
@@ -119,36 +54,14 @@ OUTPUT REQUIREMENTS
 `;
 
 export const generateMedicalCopy = async (inputs: GenerationInputs): Promise<GenerationResult> => {
-  const availableKeys = loadAvailableKeys();
-
-  if (availableKeys.length === 0) {
-    throw new Error("No API keys configured. Please add at least one GEMINI_API_KEY or MISTRAL_API_KEY to your .env.local file.");
+  if (!process.env.API_KEY) {
+    throw new Error("API Key is missing. Please select a valid API Key.");
   }
 
-  let lastError: any = null;
-  let currentKeyIndex = 0;
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // Try each available key in order
-  while (currentKeyIndex < availableKeys.length) {
-    const currentKey = availableKeys[currentKeyIndex];
-
-    try {
-      console.log(`[API Key Rotation] Trying ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
-
-      // Use the current key for generation
-      const ai = currentKey.provider === 'gemini'
-        ? new GoogleGenAI({ apiKey: currentKey.key })
-        : null;
-
-      // For Mistral, we'll handle it differently in each generation call
-      // For now, set process.env.API_KEY for backward compatibility
-      process.env.API_KEY = currentKey.key;
-      process.env.CURRENT_PROVIDER = currentKey.provider;
-
-      console.log(`[MedCopy] Generating with ${currentKey.provider} (Key #${currentKey.index}) | Carousel: ${inputs.carouselMode}`);
-
-      const citationInstruction = inputs.includeCitations
-        ? `
+  const citationInstruction = inputs.includeCitations 
+    ? `
 ━━━━━━━━━━━━━━━━━━
 CITATION INJECTION ENGINE
 ━━━━━━━━━━━━━━━━━━
@@ -156,11 +69,11 @@ Where a medical claim is made, attach a citation if available based on the provi
 • Use numbered references inline (e.g. "Sleep deprivation is a known trigger for postpartum psychosis¹").
 • Append a "References" section at the end if citations are used.
 • Do not fabricate sources. Only cite what is explicitly in the context provided below.
-`
-        : "";
+` 
+    : "";
 
-      const hashtagInstruction = inputs.includeHashtags
-        ? `
+  const hashtagInstruction = inputs.includeHashtags
+    ? `
 ━━━━━━━━━━━━━━━━━━
 HASHTAG OPTIMIZATION
 ━━━━━━━━━━━━━━━━━━
@@ -169,9 +82,9 @@ Generate 3-5 high-quality, engagement-boosting, SEO-optimized hashtags.
 • Ensure they are relevant to the niche (Medical/HealthTech) and the specific topic.
 • Mix broad (e.g., #MedEd) and specific (e.g., #CardiologyPearls) tags.
 `
-        : "";
+    : "";
 
-      const antiAiStyleInstruction = `
+  const antiAiStyleInstruction = `
 ━━━━━━━━━━━━━━━━━━
 THE AI HUMANISER PROMPT (ANTI-AI FINGERPRINT REWRITER)
 ━━━━━━━━━━━━━━━━━━
@@ -204,13 +117,13 @@ FOLLOW THIS WRITING STYLE:
 “can, may, just, that, very, really, literally, actually, certainly, probably, basically, could, maybe, delve, embark, enlightening, esteemed, shed light, craft, crafting, imagine, realm, game-changer, unlock, discover, skyrocket, abyss, not alone, in a world where, revolutionize, disruptive, utilize, utilizing, dive deep, tapestry, illuminate, unveil, pivotal, intricate, elucidate, hence, furthermore, realm, however, harness, exciting, groundbreaking, cutting-edge, remarkable, it remains to be seen, glimpse into, navigating, landscape, stark, testament, in summary, in conclusion, moreover, boost, skyrocketing, opened up, powerful, inquiries, ever-evolving”
 `;
 
-      try {
-        let currentTopic = inputs.topic;
-        let distilledInsightStr: string | undefined;
+  try {
+    let currentTopic = inputs.topic;
+    let distilledInsightStr: string | undefined;
 
-        // Step 0: Thought Distillation (Optional)
-        if (inputs.enableDistillation) {
-          const distillationPrompt = `
+    // Step 0: Thought Distillation (Optional)
+    if (inputs.enableDistillation) {
+      const distillationPrompt = `
 You are a Thought Distiller. 
 Your goal is to transform messy clinician thoughts into sharp, opinionated insights before writing.
 
@@ -222,27 +135,100 @@ Distill the raw thoughts into one clear, opinionated core insight.
 Do not write the final content yet. 
 Output ONLY the insight.
 `;
-          const distillationResult = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
-            contents: distillationPrompt,
-            config: { temperature: 0.5 }
-          });
+      const distillationResult = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: distillationPrompt,
+        config: { temperature: 0.5 }
+      });
+      
+      distilledInsightStr = distillationResult.text?.trim();
+      
+      if (distilledInsightStr) {
+        // Use the refined insight to drive the generation
+        currentTopic = `CORE INSIGHT: "${distilledInsightStr}"\n\n(Derived from original raw notes: ${inputs.topic})`;
+      }
+    }
 
-          distilledInsightStr = distillationResult.text?.trim();
+    // Step X: Handling "Vision / Image Mode"
+    if (inputs.imageMode && inputs.image) {
+      // Extract base64 data and mime type
+      const match = inputs.image.match(/^data:(.+);base64,(.+)$/);
+      let mimeType = "image/png";
+      let data = inputs.image;
+      
+      if (match) {
+        mimeType = match[1];
+        data = match[2];
+      }
 
-          if (distilledInsightStr) {
-            // Use the refined insight to drive the generation
-            currentTopic = `CORE INSIGHT: "${distilledInsightStr}"\n\n(Derived from original raw notes: ${inputs.topic})`;
-          }
+      const visionPrompt = `
+━━━━━━━━━━━━━━━━━━
+MEDICAL VISION ANALYZER & CAPTION GENERATOR
+━━━━━━━━━━━━━━━━━━
+You are an expert acting as the Persona defined below.
+Your task is to analyze the attached image and generate content describing it.
+
+INPUTS:
+PERSONA: ${inputs.persona}
+TOPIC/CONTEXT: ${currentTopic || "Analyze this image"}
+AUDIENCE: ${inputs.audience}
+
+INSTRUCTIONS:
+1. **Analyze**: Thoroughly examine the image (medical findings, instruments, setting, or anatomical features).
+2. **Caption**: Write a compelling, persona-driven caption suitable for the chosen format.
+3. **Description**: Provide a detailed visual description and analysis of what is visible.
+4. **Insight**: Offer a medical or professional insight related to the image findings.
+
+OUTPUT STRUCTURE:
+CAPTION:
+(Your generated caption)
+
+VISUAL DESCRIPTION & ANALYSIS:
+(Your detailed breakdown)
+
+CLINICAL/PROFESSIONAL TAKEAWAY:
+(Your insight)
+
+FORMATTING RULES:
+- NO BOLDING (**). NO ASTERISKS. NO ITALICS.
+- Use CAPITALIZED HEADINGS.
+
+${antiAiStyleInstruction}
+${citationInstruction}
+${hashtagInstruction}
+`;
+    
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+          parts: [
+            { inlineData: { mimeType, data } },
+            { text: visionPrompt }
+          ]
+        },
+        config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: 0.5
         }
+      });
+      
+      const draftContent = response.text || "No analysis generated.";
 
-        // Step 1: Handling "Summarizer Mode"
-        if (inputs.summarizerMode) {
-          let summaryPrompt = "";
+      return {
+        content: draftContent,
+        distilledInsight: distilledInsightStr,
+        driftScore: 95, 
+        driftReasoning: "Vision Mode active. Analysis based on visual input."
+      };
+    }
 
-          if (inputs.examSummarizerMode) {
-            // Special Prompt for Subtitle/Exam Mode
-            summaryPrompt = `
+    // Step 1: Handling "Summarizer Mode"
+    if (inputs.summarizerMode) {
+      let summaryPrompt = "";
+
+      if (inputs.examSummarizerMode) {
+        // Special Prompt for Subtitle/Exam Mode
+        summaryPrompt = `
 ━━━━━━━━━━━━━━━━━━
 CLINICAL BIOCHEMISTRY / EXAM STRATEGIST MODE (NEET-PG / USMLE)
 ━━━━━━━━━━━━━━━━━━
@@ -279,9 +265,9 @@ FORMATTING RULES:
 
 ${antiAiStyleInstruction}
 `;
-          } else {
-            // Standard Deep Dive Analyzer
-            summaryPrompt = `
+      } else {
+        // Standard Deep Dive Analyzer
+        summaryPrompt = `
 ━━━━━━━━━━━━━━━━━━
 DEEP DIVE ANALYZER & INSIGHT SYNTHESIZER
 ━━━━━━━━━━━━━━━━━━
@@ -315,48 +301,37 @@ ${antiAiStyleInstruction}
 ${citationInstruction}
 ${hashtagInstruction}
 `;
-          }
+      }
 
-          const response = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
-            contents: `${SYSTEM_INSTRUCTION}\n\n${summaryPrompt}`,
-            config: {
-              temperature: 0.5, // Lower temperature for accurate summarization
-            },
-          });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: summaryPrompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.5, // Lower temperature for accurate summarization
+        },
+      });
 
-          const draftContent = response.text || "No summary generated.";
+      const draftContent = response.text || "No summary generated.";
 
-          return {
-            content: draftContent,
-            distilledInsight: distilledInsightStr,
-            driftScore: 95, // Assume high alignment for direct summary tasks
-            driftReasoning: inputs.examSummarizerMode
-              ? "Exam/Subtitle Mode active. Content structured for NEET-PG/USMLE retention."
-              : "Summarizer mode active. Content derived directly from source text."
-          };
-        }
+      return {
+        content: draftContent,
+        distilledInsight: distilledInsightStr,
+        driftScore: 95, // Assume high alignment for direct summary tasks
+        driftReasoning: inputs.examSummarizerMode 
+          ? "Exam/Subtitle Mode active. Content structured for NEET-PG/USMLE retention." 
+          : "Summarizer mode active. Content derived directly from source text."
+      };
+    }
 
-        // Step 2: Handling "Instagram Carousel Mode"
-        if (inputs.carouselMode) {
-
-          const carouselPrompt = `
+    // Step 2: Handling "Instagram Carousel Mode"
+    if (inputs.carouselMode) {
+      const carouselPrompt = `
 ━━━━━━━━━━━━━━━━━━
 INSTAGRAM CAROUSEL GENERATOR
 ━━━━━━━━━━━━━━━━━━
 Using the Persona defined below, generate a structured, slide-by-slide Instagram Carousel based on the Topic.
 Total Slides: 5 to 10.
-
-OUTPUT FORMAT RULES:
-1. You MUST return a VALID JSON array.
-2. The JSON must be enclosed in markdown code blocks: \`\`\`json [ ... ] \`\`\`.
-3. Use this exact schema for each slide:
-   {
-     "slideNumber": number,
-     "title": "string",
-     "content": "string",
-     "visualDescription": "string"
-   }
 
 STRUCTURE:
 1. Slide 1: The Hook (Viral, scroll-stopping title).
@@ -380,51 +355,43 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-          const response = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
-            contents: `${SYSTEM_INSTRUCTION}\n\n${carouselPrompt}`,
-            config: {
-              temperature: 0.7,
-              // Removed strict schema parsing to avoid 400 errors with Gemma 2/3 models on some endpoints
-            },
-          });
-
-          // Parse JSON - extract from markdown code blocks if present
-          let jsonText = response.text || "[]";
-          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            jsonText = jsonMatch[1];
-          }
-
-          let carouselOutput: CarouselSlide[] = [];
-          try {
-            carouselOutput = JSON.parse(jsonText.trim()) as CarouselSlide[];
-          } catch (e) {
-            console.error("Failed to parse Carousel JSON:", jsonText);
-            // Fallback: Try to find a list if the JSON failed
-            if (jsonText.includes('[') && jsonText.includes(']')) {
-              try {
-                const startRaw = jsonText.indexOf('[');
-                const endRaw = jsonText.lastIndexOf(']');
-                carouselOutput = JSON.parse(jsonText.substring(startRaw, endRaw + 1));
-              } catch (innerE) {
-                carouselOutput = [];
-              }
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: carouselPrompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                slideNumber: { type: Type.INTEGER },
+                title: { type: Type.STRING, description: "Headline for the slide" },
+                content: { type: Type.STRING, description: "Body text for the slide (bullet points or short sentence)" },
+                visualDescription: { type: Type.STRING, description: "Description of the visual/graphic/iconography" }
+              },
+              required: ['slideNumber', 'title', 'content', 'visualDescription']
             }
           }
+        },
+      });
 
-          return {
-            content: "Carousel Generated.",
-            distilledInsight: distilledInsightStr,
-            carouselOutput: carouselOutput,
-            driftScore: 100, // Bypass drift for structural generation
-            driftReasoning: "Carousel mode enabled. Structural JSON generation active."
-          };
-        }
+      const carouselOutput = JSON.parse(response.text || "[]") as CarouselSlide[];
 
-        // Step 3: Handling "Batch Mode" (Random Posts)
-        if (inputs.batchMode) {
-          const batchPrompt = `
+      return {
+        content: "Carousel Generated.",
+        distilledInsight: distilledInsightStr,
+        carouselOutput: carouselOutput,
+        driftScore: 100, // Bypass drift for structural generation
+        driftReasoning: "Carousel mode enabled. Structural JSON generation active."
+      };
+    }
+
+    // Step 3: Handling "Batch Mode" (Random Posts)
+    if (inputs.batchMode) {
+      const batchPrompt = `
 ━━━━━━━━━━━━━━━━━━
 RANDOM CONTENT BATCH GENERATOR
 ━━━━━━━━━━━━━━━━━━
@@ -446,37 +413,37 @@ ${antiAiStyleInstruction}
 ${citationInstruction}
 ${hashtagInstruction}
 `;
-
-          const response = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
-            contents: `${SYSTEM_INSTRUCTION}\n\n${batchPrompt}`,
-            config: {
-              temperature: 0.9 // Higher temperature for randomness
-            },
-          });
-
-          // Parse JSON - extract from markdown code blocks if present
-          let jsonText = response.text || "[]";
-          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            jsonText = jsonMatch[1];
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: batchPrompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.9, // Higher temperature for randomness
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
           }
-          const batchOutput = JSON.parse(jsonText.trim()) as string[];
+        },
+      });
 
-          return {
-            content: "Batch Generated.",
-            distilledInsight: distilledInsightStr,
-            batchOutput: batchOutput,
-            driftScore: 100, // Bypass drift for batch
-            driftReasoning: "Batch mode enabled. Diversity prioritized."
-          };
-        }
+      const batchOutput = JSON.parse(response.text || "[]") as string[];
 
-        // Step 4: Handling "Multi-Format Exploder"
-        const isMultiFormat = inputs.format === 'Multi-Format Exploder';
+      return {
+        content: "Batch Generated.",
+        distilledInsight: distilledInsightStr,
+        batchOutput: batchOutput,
+        driftScore: 100, // Bypass drift for batch
+        driftReasoning: "Batch mode enabled. Diversity prioritized."
+      };
+    }
 
-        if (isMultiFormat) {
-          const multiFormatPrompt = `
+    // Step 4: Handling "Multi-Format Exploder"
+    const isMultiFormat = inputs.format === 'Multi-Format Exploder';
+
+    if (isMultiFormat) {
+       const multiFormatPrompt = `
 ━━━━━━━━━━━━━━━━━━
 MULTI-FORMAT CONTENT EXPLODER
 ━━━━━━━━━━━━━━━━━━
@@ -500,34 +467,40 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-          const response = await ai.models.generateContent({
-            model: 'gemma-3-27b-it',
-            contents: `${SYSTEM_INSTRUCTION}\n\n${multiFormatPrompt}`,
-            config: {
-              temperature: 0.7
+       const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: multiFormatPrompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              instagram: { type: Type.STRING, description: "Content for Instagram Carousel" },
+              linkedin: { type: Type.STRING, description: "Content for LinkedIn Post" },
+              email: { type: Type.STRING, description: "Content for Patient Email" },
+              twitter: { type: Type.STRING, description: "Content for Tweet Thread" }
             },
-          });
-
-          // Parse JSON - extract from markdown code blocks if present
-          let jsonText = response.text || "{}";
-          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) || jsonText.match(/```\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            jsonText = jsonMatch[1];
+            required: ['instagram', 'linkedin', 'email', 'twitter']
           }
-          const multiContent = JSON.parse(jsonText.trim()) as MultiFormatContent;
+        },
+      });
 
-          return {
-            content: "Multi-Format Content Generated. Please check the tabs below.",
-            distilledInsight: distilledInsightStr,
-            multiFormatOutput: multiContent,
-            // Drift detection is skipped for multi-format to preserve JSON structure integrity
-            driftScore: 100,
-            driftReasoning: "Drift detection bypassed for Multi-Format Exploder mode."
-          };
-        }
+      const multiContent = JSON.parse(response.text || "{}") as MultiFormatContent;
+      
+      return {
+        content: "Multi-Format Content Generated. Please check the tabs below.",
+        distilledInsight: distilledInsightStr,
+        multiFormatOutput: multiContent,
+        // Drift detection is skipped for multi-format to preserve JSON structure integrity
+        driftScore: 100, 
+        driftReasoning: "Drift detection bypassed for Multi-Format Exploder mode."
+      };
+    }
 
-        // Standard Single Format Generation
-        const prompt = `
+    // Standard Single Format Generation
+    const prompt = `
 ━━━━━━━━━━━━━━━━━━
 INPUTS
 ━━━━━━━━━━━━━━━━━━
@@ -564,19 +537,20 @@ ${citationInstruction}
 ${hashtagInstruction}
 `;
 
-        // Step 1: Generate Initial Draft
-        const response = await ai.models.generateContent({
-          model: 'gemma-3-27b-it',
-          contents: `${SYSTEM_INSTRUCTION}\n\n${prompt}`,
-          config: {
-            temperature: 0.7,
-          },
-        });
+    // Step 1: Generate Initial Draft
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0.7, 
+      },
+    });
 
-        const draftContent = response.text || "No content generated.";
+    const draftContent = response.text || "No content generated.";
 
-        // Step 2: Persona Drift Detector
-        const driftPrompt = `
+    // Step 2: Persona Drift Detector
+    const driftPrompt = `
 You are a Persona Drift Detector.
 Your task is to evaluate the provided content against the defined Persona.
 
@@ -597,92 +571,40 @@ INSTRUCTIONS
 2. Assign an alignment score from 0-100.
 3. If the score is below 85, rewrite the content to perfectly match the persona while maintaining the medical facts.
 4. If the score is 85 or above, return the content as is.
-6. **FORMATTING**: RETURN PURE MINIFIED JSON. Do not use unescaped newlines inside strings.
+5. **IMPORTANT**: Ensure NO bolding or asterisks are in the final content.
 
-Return your response in this JSON format:
-{
-  "score": number,
-  "reasoning": "string",
-  "finalContent": "string"
-}
+Return your response in JSON format.
 `;
 
-        const driftResponse = await ai.models.generateContent({
-          model: 'gemma-3-27b-it',
-          contents: driftPrompt,
-          config: {
-            temperature: 0.7
+    const driftResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: driftPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.INTEGER, description: "Alignment score from 0-100" },
+            reasoning: { type: Type.STRING, description: "Brief explanation of the score and any drifts detected" },
+            finalContent: { type: Type.STRING, description: "The final content (original if score >= 85, rewritten if < 85)" }
           },
-        });
-
-        // Parse JSON - extract from markdown code blocks if present
-        let driftJsonText = driftResponse.text || "{}";
-        const driftJsonMatch = driftJsonText.match(/```json\s*([\s\S]*?)\s*```/) || driftJsonText.match(/```\s*([\s\S]*?)\s*```/);
-        if (driftJsonMatch) {
-          driftJsonText = driftJsonMatch[1];
+          required: ['score', 'reasoning', 'finalContent']
         }
+      },
+    });
 
-        let driftResult;
-        try {
-          // Basic sanitization for control characters (often causes SyntaxError)
-          const sanitizedJson = driftJsonText.replace(/[\x00-\x1F\x7F-\x9F]/g, (char) => {
-            if (char === '\n') return '\\n';
-            if (char === '\r') return '';
-            if (char === '\t') return '\\t';
-            return '';
-          });
-          driftResult = JSON.parse(sanitizedJson);
-        } catch (parseError) {
-          console.warn("[Drift Detection] JSON Parsing Failed:", parseError);
-          console.warn("[Drift Detection] Raw Text:", driftJsonText);
+    // Parse JSON result from Step 2
+    const driftResult = JSON.parse(driftResponse.text || "{}");
 
-          // FALLBACK: Return original content if validation fails
-          driftResult = {
-            finalContent: draftContent,
-            score: 100,
-            reasoning: "Validation JSON parsing failed. Returned original draft."
-          };
-        }
+    return {
+      content: driftResult.finalContent || draftContent,
+      driftScore: driftResult.score,
+      driftReasoning: driftResult.reasoning,
+      distilledInsight: distilledInsightStr
+    };
 
-        // Success! Log and return
-        console.log(`[API Key Rotation] ✓ Success with ${currentKey.provider.toUpperCase()} key #${currentKey.index}`);
-
-        return {
-          content: driftResult.finalContent || draftContent,
-          driftScore: driftResult.score,
-          driftReasoning: driftResult.reasoning,
-          distilledInsight: distilledInsightStr
-        };
-
-      } catch (innerError) {
-        // This is the inner try-catch for the generation logic
-        console.error(`[API Key Rotation] ✗ Error with ${currentKey.provider.toUpperCase()} key #${currentKey.index}:`, innerError);
-        throw innerError;
-      }
-
-    } catch (error) {
-      // Outer try-catch for key rotation
-      lastError = error;
-
-      // Check if this is a quota error
-      if (isQuotaError(error)) {
-        console.warn(`[API Key Rotation] Quota exceeded for ${currentKey.provider.toUpperCase()} key #${currentKey.index}. Trying next key...`);
-        currentKeyIndex++;
-        continue;
-      }
-
-      // If it's not a quota error, throw immediately
-      console.error(`[API Key Rotation] Non-quota error encountered:`, error);
-      throw error;
-    }
+  } catch (error) {
+    console.error("Gemini Generation Error:", error);
+    throw error;
   }
-
-  // If we've exhausted all keys, throw a comprehensive error
-  const geminiCount = availableKeys.filter(k => k.provider === 'gemini').length;
-
-  throw new Error(
-    `All API keys exhausted (${geminiCount} Gemini keys tried, ${availableKeys.length} total). ` +
-    `All keys have hit quota limits. Please wait for quota reset or add more API keys. ` +
-    `Last error: ${lastError?.message || 'Unknown error'}`
-  );
 };
